@@ -1,0 +1,17 @@
+[package]
+name = "rust-raytracer"
+version = "0.1.0"
+edition = "2026"
+authors = ["Julio Otero"]
+description = "Ray tracer engine built from scratch in Rust"
+
+[[bin]]
+name = "raytracer"
+path = "src/main.rs"
+
+[dependencies]
+rayon = "1.8"
+image = "0.25"
+
+[profile.release]
+opt-level = 3
