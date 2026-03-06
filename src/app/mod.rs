@@ -1,27 +1,26 @@
 pub mod accumulator;
 pub mod controller;
 
+use pixels::{Pixels, SurfaceTexture};
 use std::sync::Arc;
 use winit::{
+    dpi::LogicalSize,
     event::{
-        Event, WindowEvent, DeviceEvent,
-        ElementState, MouseButton, KeyboardInput, VirtualKeyCode,
+        DeviceEvent, ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent,
     },
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
-    dpi::LogicalSize,
 };
-use pixels::{Pixels, SurfaceTexture};
 
-use crate::geometry::{Hittable, Bounded};
+use crate::geometry::{Bounded, Hittable};
 use crate::render::Renderer;
 use crate::scene::World;
 use accumulator::Accumulator;
 use controller::CameraController;
 
-pub const WIDTH:  u32 = 1280;
+pub const WIDTH: u32 = 1280;
 pub const HEIGHT: u32 = 720;
-const MAX_DEPTH:  u32 = 8;
+const MAX_DEPTH: u32 = 12; // más profundidad = menos píxeles negros en el vidrio
 
 pub fn run(objects: Vec<Arc<dyn Bounded>>) {
     let bvh: Arc<dyn Hittable> = Arc::new(World::build_bvh(objects));
@@ -40,10 +39,10 @@ pub fn run(objects: Vec<Arc<dyn Bounded>>) {
         Pixels::new(WIDTH, HEIGHT, surface).expect("Failed to create pixels")
     };
 
-    let renderer  = Renderer::new(WIDTH, HEIGHT);
+    let renderer = Renderer::new(WIDTH, HEIGHT);
     let mut accum = Accumulator::new(WIDTH, HEIGHT);
-    let mut ctrl  = CameraController::new();
-    let aspect    = WIDTH as f64 / HEIGHT as f64;
+    let mut ctrl = CameraController::new();
+    let aspect = WIDTH as f64 / HEIGHT as f64;
     let mut mouse_captured = false;
 
     eprintln!("Controls:");
@@ -54,39 +53,56 @@ pub fn run(objects: Vec<Arc<dyn Bounded>>) {
         *control_flow = ControlFlow::Poll;
 
         match event {
-            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
+            Event::WindowEvent {
+                event: WindowEvent::CloseRequested,
+                ..
+            } => {
                 *control_flow = ControlFlow::Exit;
             }
 
-            // Escape key releases mouse
+            // Escape suelta el mouse
             Event::WindowEvent {
-                event: WindowEvent::KeyboardInput {
-                    input: KeyboardInput {
-                        state: ElementState::Pressed,
-                        virtual_keycode: Some(VirtualKeyCode::Escape),
+                event:
+                    WindowEvent::KeyboardInput {
+                        input:
+                            KeyboardInput {
+                                state: ElementState::Pressed,
+                                virtual_keycode: Some(VirtualKeyCode::Escape),
+                                ..
+                            },
                         ..
-                    }, ..
-                }, ..
+                    },
+                ..
             } => {
-                mouse_captured = false;
-                window.set_cursor_visible(true);
+                if mouse_captured {
+                    mouse_captured = false;
+                    window.set_cursor_visible(true);
+                    let _ = window.set_cursor_grab(winit::window::CursorGrabMode::None);
+                }
             }
 
-            // Left click captures mouse
+            // Click izquierdo captura el mouse
             Event::WindowEvent {
-                event: WindowEvent::MouseInput {
-                    state: ElementState::Pressed,
-                    button: MouseButton::Left,
-                    ..
-                }, ..
+                event:
+                    WindowEvent::MouseInput {
+                        state: ElementState::Pressed,
+                        button: MouseButton::Left,
+                        ..
+                    },
+                ..
             } => {
-                mouse_captured = true;
-                window.set_cursor_visible(false);
+                if !mouse_captured {
+                    mouse_captured = true;
+                    window.set_cursor_visible(false);
+                    // Confina el cursor a la ventana para evitar que se escape
+                    let _ = window.set_cursor_grab(winit::window::CursorGrabMode::Confined);
+                }
             }
 
-            // Mouse movement orbits camera
+            // Movimiento del mouse — SOLO cuando está capturado
             Event::DeviceEvent {
-                event: DeviceEvent::MouseMotion { delta: (dx, dy) }, ..
+                event: DeviceEvent::MouseMotion { delta: (dx, dy) },
+                ..
             } => {
                 if mouse_captured {
                     ctrl.apply_mouse_delta(dx, dy);
@@ -94,7 +110,7 @@ pub fn run(objects: Vec<Arc<dyn Bounded>>) {
                 }
             }
 
-            // Render one sample per frame
+            // Renderiza un sample por frame
             Event::MainEventsCleared => {
                 if accum.sample_count < 512 {
                     let camera = ctrl.build_camera(aspect);
@@ -110,7 +126,11 @@ pub fn run(objects: Vec<Arc<dyn Bounded>>) {
                     window.set_title(&format!(
                         "Rust Ray Tracer  |  {} spp  |  {}",
                         accum.sample_count,
-                        if mouse_captured { "ESC = release mouse" } else { "click = orbit" }
+                        if mouse_captured {
+                            "ESC = soltar mouse"
+                        } else {
+                            "click = orbitar"
+                        }
                     ));
                 }
             }

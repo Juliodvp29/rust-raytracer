@@ -140,28 +140,24 @@ impl fmt::Display for Vec3 {
 
 /// Returns a random f64 in [0, 1)
 pub fn random_f64() -> f64 {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    use std::time::SystemTime;
-
-    // Simple thread-local random using time + counter
     thread_local! {
-        static COUNTER: std::cell::Cell<u64> = std::cell::Cell::new(0);
+        static RNG: std::cell::Cell<u64> = std::cell::Cell::new({
+            let mut s = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .subsec_nanos() as u64;
+            s ^= &s as *const _ as u64;
+            s | 1
+        });
     }
 
-    COUNTER.with(|c| {
-        let val = c.get();
-        c.set(val.wrapping_add(1));
-
-        let mut hasher = DefaultHasher::new();
-        val.hash(&mut hasher);
-        SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap_or_default()
-            .subsec_nanos()
-            .hash(&mut hasher);
-
-        (hasher.finish() as f64) / (u64::MAX as f64)
+    RNG.with(|rng| {
+        let mut x = rng.get();
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        rng.set(x);
+        (x as f64) / (u64::MAX as f64)
     })
 }
 
