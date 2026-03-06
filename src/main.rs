@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use rust_raytracer::{
-    math::{Vec3, Color, Point3, random_f64},
-    geometry::{Sphere, Aabb, Bounded},
+    math::{Color, Point3},
+    geometry::{Sphere, Bounded},
     materials::{Lambertian, Metal, Dielectric, Material},
     app,
 };

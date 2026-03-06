@@ -3,7 +3,10 @@ pub mod controller;
 
 use std::sync::Arc;
 use winit::{
-    event::{Event, WindowEvent, DeviceEvent, ElementState, MouseButton},
+    event::{
+        Event, WindowEvent, DeviceEvent,
+        ElementState, MouseButton, KeyboardInput, VirtualKeyCode,
+    },
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
     dpi::LogicalSize,
@@ -18,13 +21,12 @@ use controller::CameraController;
 
 pub const WIDTH:  u32 = 1280;
 pub const HEIGHT: u32 = 720;
-const MAX_DEPTH:  u32 = 8;   // lower than offline for speed
+const MAX_DEPTH:  u32 = 8;
 
 pub fn run(objects: Vec<Arc<dyn Bounded>>) {
-    // Build BVH once
     let bvh: Arc<dyn Hittable> = Arc::new(World::build_bvh(objects));
 
-    let event_loop = EventLoop::new().expect("Failed to create event loop");
+    let event_loop = EventLoop::new();
     let window = WindowBuilder::new()
         .with_title("Rust Ray Tracer")
         .with_inner_size(LogicalSize::new(WIDTH, HEIGHT))
@@ -38,88 +40,82 @@ pub fn run(objects: Vec<Arc<dyn Bounded>>) {
         Pixels::new(WIDTH, HEIGHT, surface).expect("Failed to create pixels")
     };
 
-    let renderer   = Renderer::new(WIDTH, HEIGHT);
-    let mut accum  = Accumulator::new(WIDTH, HEIGHT);
-    let mut ctrl   = CameraController::new();
-    let aspect     = WIDTH as f64 / HEIGHT as f64;
-
-    // Mouse capture state
+    let renderer  = Renderer::new(WIDTH, HEIGHT);
+    let mut accum = Accumulator::new(WIDTH, HEIGHT);
+    let mut ctrl  = CameraController::new();
+    let aspect    = WIDTH as f64 / HEIGHT as f64;
     let mut mouse_captured = false;
 
     eprintln!("Controls:");
-    eprintln!("  Left click  → capture mouse / start orbit");
-    eprintln!("  Escape      → release mouse");
-    eprintln!("  Move mouse  → orbit camera");
+    eprintln!("  Left click → capture mouse / orbit");
+    eprintln!("  Escape     → release mouse");
 
-    event_loop.run(move |event, elwt| {
-        elwt.set_control_flow(ControlFlow::Poll);
+    event_loop.run(move |event, _, control_flow| {
+        *control_flow = ControlFlow::Poll;
 
         match event {
-            // ── Window close ─────────────────────────────────────────────
             Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
-                elwt.exit();
+                *control_flow = ControlFlow::Exit;
             }
 
-            // ── Keyboard: Escape releases mouse ──────────────────────────
+            // Escape key releases mouse
             Event::WindowEvent {
-                event: WindowEvent::KeyboardInput { event: ref key_event, .. }, ..
+                event: WindowEvent::KeyboardInput {
+                    input: KeyboardInput {
+                        state: ElementState::Pressed,
+                        virtual_keycode: Some(VirtualKeyCode::Escape),
+                        ..
+                    }, ..
+                }, ..
             } => {
-                use winit::keyboard::{Key, NamedKey};
-                if key_event.state == ElementState::Pressed {
-                    if key_event.logical_key == Key::Named(NamedKey::Escape) {
-                        mouse_captured = false;
-                        window.set_cursor_visible(true);
-                    }
-                }
+                mouse_captured = false;
+                window.set_cursor_visible(true);
             }
 
-            // ── Mouse click: capture mouse ────────────────────────────────
+            // Left click captures mouse
             Event::WindowEvent {
-                event: WindowEvent::MouseInput { state, button, .. }, ..
+                event: WindowEvent::MouseInput {
+                    state: ElementState::Pressed,
+                    button: MouseButton::Left,
+                    ..
+                }, ..
             } => {
-                if button == MouseButton::Left && state == ElementState::Pressed {
-                    mouse_captured = true;
-                    window.set_cursor_visible(false);
-                }
+                mouse_captured = true;
+                window.set_cursor_visible(false);
             }
 
-            // ── Mouse movement: orbit camera ──────────────────────────────
+            // Mouse movement orbits camera
             Event::DeviceEvent {
                 event: DeviceEvent::MouseMotion { delta: (dx, dy) }, ..
             } => {
                 if mouse_captured {
                     ctrl.apply_mouse_delta(dx, dy);
-                    accum.reset(); // camera moved → start fresh
+                    accum.reset();
                 }
             }
 
-            // ── Render next frame ─────────────────────────────────────────
-            Event::AboutToWait => {
-                // Skip if we have enough samples (scene is converged)
+            // Render one sample per frame
+            Event::MainEventsCleared => {
                 if accum.sample_count < 512 {
                     let camera = ctrl.build_camera(aspect);
                     let sample = renderer.render_sample(&camera, bvh.as_ref(), MAX_DEPTH);
                     accum.add_sample(&sample);
-
-                    // Write to pixel buffer
                     accum.to_rgba(pixels.frame_mut());
 
-                    if let Err(e) = pixels.render() {
-                        eprintln!("pixels render error: {}", e);
-                        elwt.exit();
+                    if pixels.render().is_err() {
+                        *control_flow = ControlFlow::Exit;
+                        return;
                     }
 
-                    // Show sample count in title
                     window.set_title(&format!(
                         "Rust Ray Tracer  |  {} spp  |  {}",
                         accum.sample_count,
-                        if mouse_captured { "click ESC to release mouse" }
-                        else { "click to orbit" }
+                        if mouse_captured { "ESC = release mouse" } else { "click = orbit" }
                     ));
                 }
             }
 
             _ => {}
         }
-    }).expect("Event loop error");
+    });
 }
