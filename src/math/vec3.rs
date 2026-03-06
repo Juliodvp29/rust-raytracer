@@ -1,8 +1,6 @@
 use std::ops::{Add, Sub, Mul, Neg, AddAssign, MulAssign};
 use std::fmt;
 
-/// A 3-component floating-point vector used for positions, directions, and colors.
-/// All ray tracer math (dot products, cross products, reflections, etc.) goes through this type.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Vec3 {
     pub x: f64,
@@ -11,42 +9,30 @@ pub struct Vec3 {
 }
 
 impl Vec3 {
-    /// Creates a new vector with the given x, y, z components.
     pub fn new(x: f64, y: f64, z: f64) -> Self {
         Self { x, y, z }
     }
 
-    /// Returns the zero vector (0, 0, 0). Useful as a neutral starting point.
     pub fn zero() -> Self {
         Self::new(0.0, 0.0, 0.0)
     }
 
-    /// Returns the vector (1, 1, 1). Used as a white color or for simple scaling.
     pub fn one() -> Self {
         Self::new(1.0, 1.0, 1.0)
     }
 
-    /// Euclidean length (magnitude) of the vector: sqrt(x² + y² + z²).
     pub fn length(&self) -> f64 {
         self.length_squared().sqrt()
     }
 
-    /// Squared length (x² + y² + z²). Cheaper than `length()` when you only need
-    /// to compare magnitudes (avoids the sqrt).
     pub fn length_squared(&self) -> f64 {
         self.x * self.x + self.y * self.y + self.z * self.z
     }
 
-    /// Dot product: sum of component-wise products (self · other).
-    /// Result is positive when vectors point in the same direction, negative when opposing,
-    /// and zero when perpendicular. Essential for lighting and hit detection.
     pub fn dot(self, other: Vec3) -> f64 {
         self.x * other.x + self.y * other.y + self.z * other.z
     }
 
-    /// Cross product: returns a vector perpendicular to both self and other.
-    /// The order matters: self × other follows the right-hand rule.
-    /// Used for building orthonormal bases (e.g., camera coordinate frames).
     pub fn cross(self, other: Vec3) -> Vec3 {
         Vec3::new(
             self.y * other.z - self.z * other.y,
@@ -55,36 +41,27 @@ impl Vec3 {
         )
     }
 
-    /// Returns a unit vector (length = 1) pointing in the same direction.
-    /// Don't call this on a zero vector — it would cause a division by zero.
     pub fn normalize(self) -> Vec3 {
         let len = self.length();
         self * (1.0 / len)
     }
 
-    /// Returns true if all components are extremely close to zero (below 1e-8).
-    /// Used to detect degenerate vectors that can cause NaN in normalization or reflection.
     pub fn near_zero(&self) -> bool {
         const EPS: f64 = 1e-8;
         self.x.abs() < EPS && self.y.abs() < EPS && self.z.abs() < EPS
     }
 
-    /// Reflects this vector off a surface with the given unit normal.
-    /// Formula: v - 2(v·n)n — the component along the normal is flipped.
-    /// Used for mirror-like (specular) reflections in materials.
+    /// Reflect a vector around a normal
     pub fn reflect(self, normal: Vec3) -> Vec3 {
         self - normal * 2.0 * self.dot(normal)
     }
 }
 
-/// Type alias: a Vec3 used as an RGB color (x=red, y=green, z=blue), each in [0, 1].
+// Type alias for clarity in color vs position contexts
 pub type Color = Vec3;
-/// Type alias: a Vec3 used as a 3D point in world space.
 pub type Point3 = Vec3;
 
-// --- Operator overloads -------------------------------------------------------
-// These let you write natural math expressions like `a + b`, `v * 3.0`, etc.
-
+// Operator overloading
 impl Add for Vec3 {
     type Output = Vec3;
     fn add(self, other: Vec3) -> Vec3 {
@@ -107,7 +84,6 @@ impl Sub for Vec3 {
     }
 }
 
-/// Scalar multiplication: Vec3 * f64 — scales every component by the same factor.
 impl Mul<f64> for Vec3 {
     type Output = Vec3;
     fn mul(self, t: f64) -> Vec3 {
@@ -115,7 +91,6 @@ impl Mul<f64> for Vec3 {
     }
 }
 
-/// Allows writing `3.0 * vec` in addition to `vec * 3.0` (commutativity).
 impl Mul<Vec3> for f64 {
     type Output = Vec3;
     fn mul(self, v: Vec3) -> Vec3 {
@@ -123,10 +98,9 @@ impl Mul<Vec3> for f64 {
     }
 }
 
-/// Component-wise multiplication (Hadamard product): used for blending colors
-/// with material albedo (e.g., light_color * surface_color).
 impl Mul<Vec3> for Vec3 {
     type Output = Vec3;
+    /// Component-wise multiplication (useful for colors)
     fn mul(self, other: Vec3) -> Vec3 {
         Vec3::new(self.x * other.x, self.y * other.y, self.z * other.z)
     }
@@ -140,7 +114,6 @@ impl MulAssign<f64> for Vec3 {
     }
 }
 
-/// Negation: flips the direction of a vector (or inverts a color).
 impl Neg for Vec3 {
     type Output = Vec3;
     fn neg(self) -> Vec3 {
@@ -148,11 +121,66 @@ impl Neg for Vec3 {
     }
 }
 
-/// Human-readable formatting: prints "(x.xxx, y.yyy, z.zzz)" rounded to 3 decimals.
 impl fmt::Display for Vec3 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "({:.3}, {:.3}, {:.3})", self.x, self.y, self.z)
     }
+}
+
+
+use std::sync::OnceLock;
+
+/// Returns a random f64 in [0, 1)
+pub fn random_f64() -> f64 {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    use std::time::SystemTime;
+
+    // Simple thread-local random using time + counter
+    thread_local! {
+        static COUNTER: std::cell::Cell<u64> = std::cell::Cell::new(0);
+    }
+
+    COUNTER.with(|c| {
+        let val = c.get();
+        c.set(val.wrapping_add(1));
+
+        let mut hasher = DefaultHasher::new();
+        val.hash(&mut hasher);
+        SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .subsec_nanos()
+            .hash(&mut hasher);
+
+        (hasher.finish() as f64) / (u64::MAX as f64)
+    })
+}
+
+/// Returns a random Vec3 where each component is in [min, max)
+pub fn random_vec3(min: f64, max: f64) -> Vec3 {
+    let range = max - min;
+    Vec3::new(
+        min + random_f64() * range,
+        min + random_f64() * range,
+        min + random_f64() * range,
+    )
+}
+
+/// Returns a random Vec3 inside the unit sphere (rejection sampling)
+pub fn random_in_unit_sphere() -> Vec3 {
+    loop {
+        let p = random_vec3(-1.0, 1.0);
+        if p.length_squared() < 1.0 {
+            return p;
+        }
+    }
+}
+
+/// Returns a random unit vector on the surface of the unit sphere
+/// This gives true Lambertian distribution
+pub fn random_unit_vector() -> Vec3 {
+    random_in_unit_sphere().normalize()
 }
 
 #[cfg(test)]
@@ -170,21 +198,18 @@ mod tests {
     fn test_dot_product() {
         let a = Vec3::new(1.0, 0.0, 0.0);
         let b = Vec3::new(0.0, 1.0, 0.0);
-        // Two perpendicular unit vectors must have dot product = 0
-        assert_eq!(a.dot(b), 0.0); 
+        assert_eq!(a.dot(b), 0.0); // perpendicular = 0
     }
 
     #[test]
     fn test_normalize() {
         let v = Vec3::new(3.0, 0.0, 0.0);
         let n = v.normalize();
-        // After normalization the length must be 1 (within floating-point tolerance)
         assert!((n.length() - 1.0).abs() < 1e-10);
     }
 
     #[test]
     fn test_cross_product() {
-        // X × Y should yield Z (standard right-hand rule)
         let x = Vec3::new(1.0, 0.0, 0.0);
         let y = Vec3::new(0.0, 1.0, 0.0);
         let z = x.cross(y);
