@@ -4,6 +4,14 @@ A physically-based, interactive ray tracer built entirely from scratch in Rust. 
 
 The renderer accumulates samples over time: the longer you let it sit still, the cleaner and more photorealistic the image becomes. When you orbit the camera, it switches to a fast low-resolution preview mode that keeps the motion smooth, then automatically returns to full HD quality the moment you stop.
 
+## Download
+
+| Platform | Link |
+|---|---|
+| **Windows (x86-64)** | [⬇ raytracer.exe — v1.0.0](https://github.com/Juliodvp29/rust-raytracer/releases/download/v1.0.0/raytracer.exe) |
+
+> No installation needed. Download the `.exe`, double-click, and a window will open with the live render.
+
 ---
 
 ## Features
