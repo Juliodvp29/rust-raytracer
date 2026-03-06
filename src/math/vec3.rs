@@ -55,6 +55,15 @@ impl Vec3 {
     pub fn reflect(self, normal: Vec3) -> Vec3 {
         self - normal * 2.0 * self.dot(normal)
     }
+
+    /// Refract a vector through a surface using Snell's law.
+    /// `etai_over_etat` = η/η' (ratio of refractive indices: incident / transmitted)
+    pub fn refract(self, normal: Vec3, etai_over_etat: f64) -> Vec3 {
+        let cos_theta = (-self).dot(normal).min(1.0);
+        let r_perp = (self + normal * cos_theta) * etai_over_etat;
+        let r_para = normal * -(1.0 - r_perp.length_squared()).abs().sqrt();
+        r_perp + r_para
+    }
 }
 
 // Type alias for clarity in color vs position contexts
@@ -128,7 +137,7 @@ impl fmt::Display for Vec3 {
 }
 
 
-
+use std::sync::OnceLock;
 
 /// Returns a random f64 in [0, 1)
 pub fn random_f64() -> f64 {
