@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use rust_raytracer::{
-    math::{Vec3, Color, Point3, random_f64},
+    math::{Color, Point3, random_f64},
     core::Ray,
     geometry::{Hittable, Sphere},
     scene::World,
@@ -58,9 +58,9 @@ fn main() {
     let camera = Camera::new(aspect_ratio, 2.0, 1.0);
 
     // Render
+    let mut pixels = Vec::with_capacity((image_width * image_height) as usize);
     eprintln!("Rendering {}x{} @ {} samples/px...", image_width, image_height, samples_per_pixel);
 
-    println!("P3\n{} {}\n255", image_width, image_height);
 
     for j in (0..image_height).rev() {
         eprintln!("Scanlines remaining: {}", j);
@@ -75,10 +75,18 @@ fn main() {
                 color += ray_color(&ray, &world, max_depth);
             }
 
-            let (r, g, b) = to_rgb(color, samples_per_pixel);
-            println!("{} {} {}", r, g, b);
+            pixels.push(to_rgb(color, samples_per_pixel));
         }
     }
 
-    eprintln!("Done!");
+    // Save PNG
+    rust_raytracer::utils::save_png(&pixels, image_width, image_height, "output.png");
+
+    // Still output PPM to stdout for backward compatibility if redirected
+    println!("P3\n{} {}\n255", image_width, image_height);
+    for (r, g, b) in &pixels {
+        println!("{} {} {}", r, g, b);
+    }
+
+    eprintln!("Done! Image saved to output.png");
 }

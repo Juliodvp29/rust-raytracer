@@ -1,4 +1,5 @@
 use crate::math::Color;
+use image::{ImageBuffer, RgbImage};
 
 /// Converts a floating-point HDR color to 8-bit sRGB, accounting for multi-sample averaging
 /// and gamma correction.
@@ -24,4 +25,15 @@ pub fn write_ppm(pixels: &[(u8, u8, u8)], width: u32, height: u32) {
     for (r, g, b) in pixels {
         println!("{} {} {}", r, g, b);
     }
+}
+
+/// Saves the pixel buffer as a PNG file.
+pub fn save_png(pixels: &[(u8, u8, u8)], width: u32, height: u32, path: &str) {
+    let mut img: RgbImage = ImageBuffer::new(width, height);
+    for (i, (r, g, b)) in pixels.iter().enumerate() {
+        let x = (i as u32) % width;
+        let y = (i as u32) / width;
+        img.put_pixel(x, y, image::Rgb([*r, *g, *b]));
+    }
+    img.save(path).expect("Failed to save PNG image");
 }

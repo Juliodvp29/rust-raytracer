@@ -1,4 +1,4 @@
-use crate::math::{Vec3, Color};
+use crate::math::Color;
 use crate::core::Ray;
 use crate::geometry::HitRecord;
 
