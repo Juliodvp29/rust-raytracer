@@ -1,14 +1,9 @@
-use crate::math::{Vec3, Point3};
+use super::hittable::{HitRecord, Hittable};
 use crate::core::Ray;
 use crate::materials::Material;
-use super::hittable::{Hittable, HitRecord};
+use crate::math::{Point3, Vec3};
 use std::sync::Arc;
 
-/// An Axis-Aligned Bounding Box used directly as a renderable object (a box/cube).
-///
-/// Defined by two corners: `min` (bottom-left-back) and `max` (top-right-front).
-/// Intersection uses the slab method: for each axis, compute the ray's entry/exit t,
-/// then take the overlap of all three intervals.
 pub struct Aabb {
     pub min: Point3,
     pub max: Point3,
@@ -30,7 +25,7 @@ impl Aabb {
 impl Hittable for Aabb {
     fn hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord> {
         let mut t_enter = t_min;
-        let mut t_exit  = t_max;
+        let mut t_exit = t_max;
 
         // ── Slab method: test each axis ───────────────────────────────────
         let axes = [
@@ -43,10 +38,14 @@ impl Hittable for Aabb {
             let inv = 1.0 / dir;
             let mut t0 = (box_min - orig) * inv;
             let mut t1 = (box_max - orig) * inv;
-            if inv < 0.0 { std::mem::swap(&mut t0, &mut t1); }
+            if inv < 0.0 {
+                std::mem::swap(&mut t0, &mut t1);
+            }
             t_enter = t_enter.max(t0);
-            t_exit  = t_exit.min(t1);
-            if t_exit <= t_enter { return None; }
+            t_exit = t_exit.min(t1);
+            if t_exit <= t_enter {
+                return None;
+            }
         }
 
         // ── Determine which face was hit and compute the normal ───────────
@@ -58,17 +57,23 @@ impl Hittable for Aabb {
         let outward_normal = if (p.x - self.min.x).abs() < eps {
             Vec3::new(-1.0, 0.0, 0.0)
         } else if (p.x - self.max.x).abs() < eps {
-            Vec3::new( 1.0, 0.0, 0.0)
+            Vec3::new(1.0, 0.0, 0.0)
         } else if (p.y - self.min.y).abs() < eps {
             Vec3::new(0.0, -1.0, 0.0)
         } else if (p.y - self.max.y).abs() < eps {
-            Vec3::new(0.0,  1.0, 0.0)
+            Vec3::new(0.0, 1.0, 0.0)
         } else if (p.z - self.min.z).abs() < eps {
             Vec3::new(0.0, 0.0, -1.0)
         } else {
-            Vec3::new(0.0, 0.0,  1.0)
+            Vec3::new(0.0, 0.0, 1.0)
         };
 
-        Some(HitRecord::new(p, t, ray, outward_normal, Arc::clone(&self.material)))
+        Some(HitRecord::new(
+            p,
+            t,
+            ray,
+            outward_normal,
+            Arc::clone(&self.material),
+        ))
     }
 }

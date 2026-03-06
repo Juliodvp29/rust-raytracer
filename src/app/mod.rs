@@ -22,6 +22,10 @@ pub const WIDTH: u32 = 1600;
 pub const HEIGHT: u32 = 900;
 const MAX_DEPTH: u32 = 50;
 
+const PREVIEW_SCALE: u32 = 2;
+
+const FRAMES_AFTER_MOVE: u32 = 0;
+
 pub fn run(objects: Vec<Arc<dyn Bounded>>) {
     let bvh: Arc<dyn Hittable> = Arc::new(World::build_bvh(objects));
 
@@ -44,7 +48,9 @@ pub fn run(objects: Vec<Arc<dyn Bounded>>) {
     let mut ctrl = CameraController::new();
     let aspect = WIDTH as f64 / HEIGHT as f64;
     let mut mouse_captured = false;
-    let mut pending_reset = false; // reset diferido — evita frame negro
+    let mut pending_reset = false;
+    // Counts down to 0 after mouse stops; while > 0 we stay in preview mode
+    let mut moving_frames: u32 = 0;
 
     eprintln!("Controls:");
     eprintln!("  Left click → capture mouse / orbit");
@@ -103,14 +109,21 @@ pub fn run(objects: Vec<Arc<dyn Bounded>>) {
             } => {
                 if mouse_captured {
                     ctrl.apply_mouse_delta(dx, dy);
-                    pending_reset = true; // marcar reset, no hacerlo todavía
+                    pending_reset = true;
+                    moving_frames = FRAMES_AFTER_MOVE + 1; // keep preview mode hot
                 }
             }
 
             Event::MainEventsCleared => {
-                // Renderiza el nuevo sample PRIMERO, luego resetea si hace falta
                 let camera = ctrl.build_camera(aspect);
-                let sample = renderer.render_sample(&camera, bvh.as_ref(), MAX_DEPTH);
+
+                // Choose render mode: preview (scaled) while moving, HD when still
+                let is_moving = moving_frames > 0;
+                let sample = if is_moving {
+                    renderer.render_sample_scaled(&camera, bvh.as_ref(), MAX_DEPTH, PREVIEW_SCALE)
+                } else {
+                    renderer.render_sample(&camera, bvh.as_ref(), MAX_DEPTH)
+                };
 
                 if pending_reset {
                     accum.reset();
@@ -120,14 +133,24 @@ pub fn run(objects: Vec<Arc<dyn Bounded>>) {
                 accum.add_sample(&sample);
                 accum.to_rgba(pixels.frame_mut());
 
+                if moving_frames > 0 {
+                    moving_frames -= 1;
+                }
+
                 if pixels.render().is_err() {
                     *control_flow = ControlFlow::Exit;
                     return;
                 }
 
+                let mode_label = if is_moving {
+                    format!("preview {}x", PREVIEW_SCALE)
+                } else {
+                    format!("{} spp HD", accum.sample_count)
+                };
+
                 window.set_title(&format!(
-                    "Rust Ray Tracer  |  {} spp  |  {}",
-                    accum.sample_count,
+                    "Rust Ray Tracer  |  {}  |  {}",
+                    mode_label,
                     if mouse_captured {
                         "ESC = soltar mouse"
                     } else {

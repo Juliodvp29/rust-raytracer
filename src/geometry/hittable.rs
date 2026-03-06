@@ -3,7 +3,6 @@ use crate::core::Ray;
 use crate::materials::Material;
 use std::sync::Arc;
 
-/// All information about a ray-object intersection
 #[derive(Clone)]
 pub struct HitRecord {
     /// Point of intersection in world space
