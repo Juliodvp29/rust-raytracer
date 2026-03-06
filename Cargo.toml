@@ -10,8 +10,10 @@ name = "raytracer"
 path = "src/main.rs"
 
 [dependencies]
-rayon = "1.8"
-image = "0.25"
+rayon    = "1.8"
+image    = "0.25"
+winit    = "0.29"
+pixels   = "0.13"
 
 [profile.release]
 opt-level = 3
