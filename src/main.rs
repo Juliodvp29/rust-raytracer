@@ -1,74 +1,84 @@
+use std::sync::Arc;
 use rust_raytracer::{
-    math::{Vec3, Color, Point3},
+    math::{Vec3, Color, Point3, random_f64},
     core::Ray,
     geometry::{Hittable, Sphere},
     scene::World,
     render::Camera,
+    materials::{Lambertian, Metal},
     utils::to_rgb,
 };
 
-/// Determines the color of a ray by checking if it hits anything in the world.
-/// If no hit occurs, it returns a sky gradient blending from white (bottom) to light blue (top).
-fn ray_color(ray: &Ray, world: &World) -> Color {
-    // Check if the ray intersects any object; t_min=0.001 avoids self-intersection (shadow acne)
-    if let Some(rec) = world.hit(ray, 0.001, f64::INFINITY) {
-        // Map the surface normal (range -1..1) to a visible color (range 0..1)
-        return (rec.normal + Vec3::one()) * 0.5;
+// ─── Ray color (recursive) ───────────────────────────────────────────────────
+
+fn ray_color(ray: &Ray, world: &World, depth: u32) -> Color {
+    // Exceeded ray bounce limit — no more light gathered
+    if depth == 0 {
+        return Color::zero();
     }
 
-    // No hit: compute the sky gradient based on the ray's vertical direction
+    if let Some(rec) = world.hit(ray, 0.001, f64::INFINITY) {
+        // Ask the material what to do with this ray
+        if let Some((scattered, attenuation)) = rec.material.scatter(ray, &rec) {
+            // Multiply attenuation color by the color of the scattered ray
+            return attenuation * ray_color(&scattered, world, depth - 1);
+        }
+        return Color::zero(); // absorbed
+    }
+
+    // Background gradient
     let unit = ray.direction.normalize();
-    // t=0 → bottom (white), t=1 → top (blue). Linear blend (lerp) between the two.
-    let t = 0.5 * (unit.y + 1.0); 
+    let t = 0.5 * (unit.y + 1.0);
     Color::one() * (1.0 - t) + Color::new(0.5, 0.7, 1.0) * t
 }
 
 
 fn main() {
-    // --- Image dimensions ---
+    // Image
     let aspect_ratio: f64 = 16.0 / 9.0;
     let image_width: u32 = 400;
-    // Height is derived from width so the aspect ratio is always respected
     let image_height: u32 = (image_width as f64 / aspect_ratio) as u32;
-    // Number of random rays per pixel for anti-aliasing (1 = no AA yet)
-    let samples_per_pixel: u32 = 1; 
+    let samples_per_pixel: u32 = 100; // antialiasing
+    let max_depth: u32 = 50;          // max ray bounces
 
-    // --- Build the scene ---
+    // Materials
+    let mat_ground   = Arc::new(Lambertian::new(Color::new(0.8, 0.8, 0.0)));
+    let mat_center   = Arc::new(Lambertian::new(Color::new(0.7, 0.3, 0.3)));
+    let mat_left     = Arc::new(Metal::new(Color::new(0.8, 0.8, 0.8), 0.3));
+    let mat_right    = Arc::new(Metal::new(Color::new(0.8, 0.6, 0.2), 1.0));
+
+    // Scene
     let mut world = World::new();
-    // Small foreground sphere centered in the view
-    world.add(Box::new(Sphere::new(Point3::new(0.0, 0.0, -1.0), 0.5)));
-    // Large sphere acting as the ground plane (radius so big it looks flat)
-    world.add(Box::new(Sphere::new(Point3::new(0.0, -100.5, -1.0), 100.0))); 
+    world.add(Box::new(Sphere::new(Point3::new( 0.0, -100.5, -1.0), 100.0, mat_ground)));
+    world.add(Box::new(Sphere::new(Point3::new( 0.0,    0.0, -1.0),   0.5, mat_center)));
+    world.add(Box::new(Sphere::new(Point3::new(-1.0,    0.0, -1.0),   0.5, mat_left)));
+    world.add(Box::new(Sphere::new(Point3::new( 1.0,    0.0, -1.0),   0.5, mat_right)));
 
-    // --- Set up the camera ---
-    // viewport_height=2.0 and focal_length=1.0 are classic defaults for a simple pinhole camera
+    // Camera
     let camera = Camera::new(aspect_ratio, 2.0, 1.0);
 
-    // Pre-allocate pixel storage to avoid repeated heap allocations inside the loop
-    let mut pixels: Vec<(u8, u8, u8)> = Vec::with_capacity((image_width * image_height) as usize);
+    // Render
+    eprintln!("Rendering {}x{} @ {} samples/px...", image_width, image_height, samples_per_pixel);
 
-    eprintln!("Rendering {}x{} image...", image_width, image_height);
+    println!("P3\n{} {}\n255", image_width, image_height);
 
-    // Iterate rows from bottom to top (j goes high → low) to match PPM's top-down order
     for j in (0..image_height).rev() {
+        eprintln!("Scanlines remaining: {}", j);
         for i in 0..image_width {
-            // UV coordinates normalize pixel position to [0,1] range for the camera
-            let u = i as f64 / (image_width - 1) as f64;
-            let v = j as f64 / (image_height - 1) as f64;
+            let mut color = Color::zero();
 
-            let ray = camera.get_ray(u, v);
-            let color = ray_color(&ray, &world);
+            // Antialiasing: accumulate N samples with random subpixel offsets
+            for _ in 0..samples_per_pixel {
+                let u = (i as f64 + random_f64()) / (image_width - 1) as f64;
+                let v = (j as f64 + random_f64()) / (image_height - 1) as f64;
+                let ray = camera.get_ray(u, v);
+                color += ray_color(&ray, &world, max_depth);
+            }
 
-            // Convert the floating-point color to 8-bit RGB, applying gamma correction
-            pixels.push(to_rgb(color, samples_per_pixel));
+            let (r, g, b) = to_rgb(color, samples_per_pixel);
+            println!("{} {} {}", r, g, b);
         }
     }
 
-    // Write the PPM header, then each pixel's RGB values to stdout
-    println!("P3\n{} {}\n255", image_width, image_height);
-    for (r, g, b) in &pixels {
-        println!("{} {} {}", r, g, b);
-    }
-
-    eprintln!("Done! Redirect stdout to a .ppm file to view the image.");
+    eprintln!("Done!");
 }
