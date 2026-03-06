@@ -1,7 +1,6 @@
 use crate::math::{Vec3, Point3, random_in_unit_disk};
 use crate::core::Ray;
 
-/// Camera represents the virtual eye in the scene, handling projection and depth of field.
 pub struct Camera {
     origin: Point3,
     lower_left_corner: Point3,
@@ -27,20 +26,20 @@ impl Camera {
         let viewport_height = 2.0 * h;
         let viewport_width = aspect * viewport_height;
 
-        // Calculate the camera's local coordinate system (w, u, v)
-        // w is the opposite of the look direction
+        // Calculate the camera's orthonormal basis (w, u, v)
+        // w points away from the target
         let w = (look_from - look_at).normalize();
-        // u is the "right" vector
+        // u is the "right" vector perpendicular to w and vup
         let u = vup.cross(w).normalize();
-        // v is the "up" vector relative to the camera
+        // v is the relative "up" vector completing the basis
         let v = w.cross(u);
 
         let origin = look_from;
-        // The horizontal and vertical vectors of the viewport, scaled by focus distance
+        // The viewportvectors are scaled by focus_dist so that they lie on the plane of focus
         let horizontal = u * viewport_width * focus_dist;
         let vertical = v * viewport_height * focus_dist;
         
-        // Calculate the world-space position of the bottom-left corner of the viewport
+        // Final bottom-left corner calculation in world space
         let lower_left_corner = origin
             - horizontal * 0.5
             - vertical * 0.5
@@ -57,14 +56,15 @@ impl Camera {
         }
     }
 
-    /// Generates a Ray for the given screen coordinates (s, t).
-    /// s and t range from 0.0 to 1.0.
+    /// Generates a Ray for the given screen coordinates (s, t) in [0, 1].
+    /// Includes defocus blur by sampling a random point on the virtual lens.
     pub fn get_ray(&self, s: f64, t: f64) -> Ray {
-        // Depth-of-field: pick a random point in the lens disk
+        // Defocus blur: pick a random point in the lens disk
         let rd = random_in_unit_disk() * self.lens_radius;
+        // Offset the ray origin so it starts from a random part of the lens
         let offset = self.u * rd.x + self.v * rd.y;
         
-        // Ray starts from the origin (plus lens offset) and points towards the pixel on the focus plane
+        // The ray points from the offset origin towards the specific pixel on the focus plane
         let direction = self.lower_left_corner
             + self.horizontal * s
             + self.vertical * t

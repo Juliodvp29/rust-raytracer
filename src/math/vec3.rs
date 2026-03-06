@@ -137,7 +137,6 @@ impl fmt::Display for Vec3 {
 }
 
 
-use std::sync::OnceLock;
 
 /// Returns a random f64 in [0, 1)
 pub fn random_f64() -> f64 {
@@ -190,6 +189,20 @@ pub fn random_in_unit_sphere() -> Vec3 {
 /// This gives true Lambertian distribution
 pub fn random_unit_vector() -> Vec3 {
     random_in_unit_sphere().normalize()
+}
+
+/// Used for depth-of-field: simulates rays originating from different points on the lens
+pub fn random_in_unit_disk() -> Vec3 {
+    loop {
+        let p = Vec3::new(
+            random_f64() * 2.0 - 1.0,
+            random_f64() * 2.0 - 1.0,
+            0.0,
+        );
+        if p.length_squared() < 1.0 {
+            return p;
+        }
+    }
 }
 
 #[cfg(test)]
