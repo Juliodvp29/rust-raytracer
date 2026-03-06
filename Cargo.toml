@@ -1,7 +1,7 @@
 [package]
 name = "rust-raytracer"
 version = "0.1.0"
-edition = "2026"
+edition = "2021"
 authors = ["Julio Otero"]
 description = "Ray tracer engine built from scratch in Rust"
 

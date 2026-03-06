@@ -1,5 +1,4 @@
 use crate::math::{Vec3, Point3};
-use crate::core::Ray;
 
 /// A ray in 3D space, defined by an origin point and a direction vector.
 ///
