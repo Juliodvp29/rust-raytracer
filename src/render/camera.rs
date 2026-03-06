@@ -1,57 +1,75 @@
-use crate::math::{Vec3, Point3};
+use crate::math::{Vec3, Point3, random_in_unit_disk};
 use crate::core::Ray;
 
-/// A simple pinhole camera that maps UV coordinates to rays in 3D space.
-///
-/// The camera uses a virtual viewport (a rectangle in front of it) to define
-/// what portion of the scene is visible. Every pixel corresponds to one point
-/// on that viewport, and a ray is traced from the camera origin through that point.
+/// Camera represents the virtual eye in the scene, handling projection and depth of field.
 pub struct Camera {
-    /// Position of the camera in world space (currently always at the origin).
     origin: Point3,
-    /// The bottom-left corner of the viewport rectangle in world space.
-    /// Computed once at construction so `get_ray` is very cheap.
     lower_left_corner: Point3,
-    /// Full width vector of the viewport pointing to the right (X axis).
     horizontal: Vec3,
-    /// Full height vector of the viewport pointing upward (Y axis).
     vertical: Vec3,
+    u: Vec3,
+    v: Vec3,
+    lens_radius: f64,
 }
 
 impl Camera {
-    /// Creates a camera from high-level parameters.
-    pub fn new(aspect_ratio: f64, viewport_height: f64, focal_length: f64) -> Self {
-        let viewport_width = aspect_ratio * viewport_height;
+    pub fn new(
+        look_from: Point3,
+        look_at: Point3,
+        vup: Vec3,
+        vfov: f64,
+        aspect: f64,
+        aperture: f64,
+        focus_dist: f64,
+    ) -> Self {
+        let theta = vfov.to_radians();
+        let h = (theta / 2.0).tan();
+        let viewport_height = 2.0 * h;
+        let viewport_width = aspect * viewport_height;
 
-        let origin = Point3::zero();
-        // The viewport spans from -horizontal/2 to +horizontal/2 horizontally
-        let horizontal = Vec3::new(viewport_width, 0.0, 0.0);
-        let vertical = Vec3::new(0.0, viewport_height, 0.0);
-        // Start at the origin, move left half the width, down half the height,
-        // then forward (negative Z) by focal_length to reach the viewport's bottom-left corner
+        // Calculate the camera's local coordinate system (w, u, v)
+        // w is the opposite of the look direction
+        let w = (look_from - look_at).normalize();
+        // u is the "right" vector
+        let u = vup.cross(w).normalize();
+        // v is the "up" vector relative to the camera
+        let v = w.cross(u);
+
+        let origin = look_from;
+        // The horizontal and vertical vectors of the viewport, scaled by focus distance
+        let horizontal = u * viewport_width * focus_dist;
+        let vertical = v * viewport_height * focus_dist;
+        
+        // Calculate the world-space position of the bottom-left corner of the viewport
         let lower_left_corner = origin
             - horizontal * 0.5
             - vertical * 0.5
-            - Vec3::new(0.0, 0.0, focal_length);
+            - w * focus_dist;
 
         Self {
             origin,
             lower_left_corner,
             horizontal,
             vertical,
+            u,
+            v,
+            lens_radius: aperture / 2.0,
         }
     }
 
-    /// Generates a ray that passes through the viewport point at normalized coordinates (u, v).
-    /// u ∈ [0, 1] is the horizontal position (0 = left, 1 = right).
-    /// v ∈ [0, 1] is the vertical position (0 = bottom, 1 = top).
-    /// The ray direction is not normalized here; normalization happens in `ray_color`
-    /// when computing the sky gradient.
-    pub fn get_ray(&self, u: f64, v: f64) -> Ray {
+    /// Generates a Ray for the given screen coordinates (s, t).
+    /// s and t range from 0.0 to 1.0.
+    pub fn get_ray(&self, s: f64, t: f64) -> Ray {
+        // Depth-of-field: pick a random point in the lens disk
+        let rd = random_in_unit_disk() * self.lens_radius;
+        let offset = self.u * rd.x + self.v * rd.y;
+        
+        // Ray starts from the origin (plus lens offset) and points towards the pixel on the focus plane
         let direction = self.lower_left_corner
-            + self.horizontal * u
-            + self.vertical * v
-            - self.origin;
-        Ray::new(self.origin, direction)
+            + self.horizontal * s
+            + self.vertical * t
+            - self.origin - offset;
+            
+        Ray::new(self.origin + offset, direction)
     }
 }
